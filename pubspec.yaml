@@ -1,0 +1,52 @@
+name: offline_sos
+description: Offline SOS + map + anti-radar starter
+publish_to: "none"
+version: 0.1.0
+
+environment:
+  sdk: ">=2.18.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Yandex MapKit (Android + iOS)
+  yandex_mapkit: 4.2.1 
+  
+  # fallback/offline map renderer using leaflet-like plugin
+  flutter_map: ^4.0.0
+  flutter_map_tile_caching: ^8.0.1
+
+  # local DB & persistence
+  sqflite: ^2.2.0
+  path_provider: ^2.0.0
+  shared_preferences: ^2.2.2 
+
+  # permissions & location
+  permission_handler: ^10.0.0
+  location: ^4.4.0
+  latlong2: ^0.8.2 
+
+  # dialer & connectivity
+  url_launcher: ^6.1.7
+  connectivity_plus: ^4.0.0
+
+
+  firebase_core: 2.32.0   
+  cloud_firestore: 4.17.5 
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_launcher_icons: ^0.13.1
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - lib/assets/icons/
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "icon.png"
