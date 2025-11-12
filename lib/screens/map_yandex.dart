@@ -9,11 +9,12 @@ import 'dart:async';
 import 'cloud_service.dart';
 
 const String _userIconPath = 'lib/assets/icons/my_location.png';
+const String _clientPinPath = 'lib/assets/icons/client.png';
 const String _policeIconPath = 'lib/assets/icons/police.png';
 const String _mchsIconPath = 'lib/assets/icons/mchs.png';
-const String _evacuatorIconPath = 'lib/assets/icons/evacuator.png';
+const String _evacuatorPinPath = 'lib/assets/icons/evacuator.png';
 const String _cameraIconPath = 'lib/assets/icons/camera.png';
-const String _workerIconPath = 'lib/assets/icons/worker_pin.png';
+
 
 class MapYandex extends StatefulWidget {
   final LatLng? current;
@@ -110,23 +111,18 @@ class _MapYandexState extends State<MapYandex> {
         ),
       );
     }
+    // ✅ НОВЫЙ КОД (Блок 1) — Работник видит Клиента как client.png
     if (widget.isWorkerMode && widget.activeSos != null) {
       final sosLat = widget.activeSos!['lat'] as double;
       final sosLon = widget.activeSos!['lon'] as double;
       final sosPoint = Point(latitude: sosLat, longitude: sosLon);
-      final String type = widget.activeSos!['type'] as String;
-      String iconPath;
-      switch (type) {
-          case 'evacuator': iconPath = _evacuatorIconPath; break;
-          case 'sto': iconPath = _policeIconPath; break;
-          default: iconPath = _mchsIconPath;
-      }
+      
       newObjects.add(
         PlacemarkMapObject(
           mapId: const MapObjectId('sos_client_point'),
           point: sosPoint,
           icon: PlacemarkIcon.single(PlacemarkIconStyle(
-            image: BitmapDescriptor.fromAssetImage(iconPath),
+            image: BitmapDescriptor.fromAssetImage(_clientPinPath), // 🚀 ВСЕГДА client.png
             scale: 0.25,
           )),
           onTap: (PlacemarkMapObject object, Point point) {
@@ -135,14 +131,16 @@ class _MapYandexState extends State<MapYandex> {
         ),
       );
     }
-    if (widget.trackedWorkerLocation != null) {
+    // ✅ НОВЫЙ КОД (Блок 2) — Клиент видит Работника как evacuator.png
+    // ⚠️ Важно: Этот блок должен выполняться ТОЛЬКО для Клиента (isWorkerMode = false)
+    if (!widget.isWorkerMode && widget.trackedWorkerLocation != null) { // 🚀 ДОБАВЛЕНА ПРОВЕРКА РОЛИ
         final workerPoint = Point(latitude: widget.trackedWorkerLocation!.latitude, longitude: widget.trackedWorkerLocation!.longitude);
         newObjects.add(
             PlacemarkMapObject(
                 mapId: const MapObjectId('worker_location_point'),
                 point: workerPoint,
                 icon: PlacemarkIcon.single(PlacemarkIconStyle(
-                    image: BitmapDescriptor.fromAssetImage(_workerIconPath),
+                    image: BitmapDescriptor.fromAssetImage(_evacuatorPinPath), // 🚀 ИСПОЛЬЗУЕМ evacuator.png
                     scale: 0.2,
                 )),
                 isDraggable: false,
@@ -155,7 +153,7 @@ class _MapYandexState extends State<MapYandex> {
         switch (poi['type']) {
           case 'police': iconPath = _policeIconPath; break;
           case 'mchs': iconPath = _mchsIconPath; break;
-          case 'evacuator': iconPath = _evacuatorIconPath; break;
+          case 'evacuator': iconPath = _evacuatorPinPath; break;
           default: iconPath = _userIconPath;
         }
         newObjects.add(
