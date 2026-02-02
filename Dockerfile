@@ -1,17 +1,16 @@
 FROM mobiledevops/flutter-sdk-image:latest
 
-# Разрешаем гит и работу под рутом для флаттера
 USER root
 RUN git config --global --add safe.directory /home/mobiledevops/.flutter-sdk
 
-WORKDIR /app
-
-# Копируем всё
+# Копируем всё в временную папку
+WORKDIR /tmp/setup
 COPY . .
 
-# Главная магия: отключаем проверку рута через переменную окружения
-ENV CHROME_EXECUTABLE=/usr/bin/google-chrome
-ENV FLUTTER_ALLOW_HTTP=true
+# Магия: если файлы упали внутрь лишней папки, вытаскиваем их в корень /app
+RUN if [ -d "auto-sos-flutter" ]; then mv auto-sos-flutter/* /app/ && mv auto-sos-flutter/.[!.]* /app/ ; else mv * /app/ && mv .[!.]* /app/ ; fi
 
-# Запускаем через флаг --suppress-analytics на всякий случай
+WORKDIR /app
+
+# Убеждаемся, что мы в корне проекта (где pubspec.yaml) и запускаем
 RUN flutter pub get
