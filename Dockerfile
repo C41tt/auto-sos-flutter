@@ -1,17 +1,17 @@
 FROM mobiledevops/flutter-sdk-image:latest
 
-# Фиксим ошибку прав доступа для git
+# Разрешаем гит и работу под рутом для флаттера
 USER root
 RUN git config --global --add safe.directory /home/mobiledevops/.flutter-sdk
 
-# Ставим рабочую директорию
 WORKDIR /app
 
-# Копируем файлы
-COPY --chown=mobiledevops:mobiledevops . .
+# Копируем всё
+COPY . .
 
-# Переключаемся на обычного пользователя, чтобы flutter не ругался
-USER mobiledevops
+# Главная магия: отключаем проверку рута через переменную окружения
+ENV CHROME_EXECUTABLE=/usr/bin/google-chrome
+ENV FLUTTER_ALLOW_HTTP=true
 
-# Запускаем получение пакетов
+# Запускаем через флаг --suppress-analytics на всякий случай
 RUN flutter pub get
