@@ -1,37 +1,75 @@
-// lib/main.dart
-
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:firebase_core/firebase_core.dart'; // ⬅️ ВКЛЮЧАЕМ ИМПОРТ
+import 'package:firebase_core/firebase_core.dart'; 
 
 import 'screens/auth_screen.dart';
-import 'screens/map_screen.dart'; // Для водителя
-import 'screens/worker_home_screen.dart'; // Для работника
+import 'screens/map_screen.dart'; 
+import 'screens/worker_home_screen.dart'; 
+import 'screens/menu_screen.dart'; // ✅ Добавил импорт Меню
 import 'services/db_service.dart';
-import 'services/location_exchange_service.dart'; // сервис в lib/services/
+import 'services/location_exchange_service.dart'; 
+
+Future<void> clearSavedRole() async {
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.remove('user_role'); 
+  debugPrint('✅ Роль сброшена.');
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await _initializeApp();
+}
 
-  // Инициализация локальной БД
-  await DBService.init();
+Future<void> _initializeApp() async {
+  await DBService.init(); 
 
-  // ✅ ИНИЦИАЛИЗАЦИЯ FIREBASE (ТЕПЕРЬ ДОЛЖНА РАБОТАТЬ С GOOGLESERVICE-INFO.PLIST)
   try {
     await Firebase.initializeApp();
-    debugPrint("✅ Firebase успешно инициализирован");
+    debugPrint("✅ Firebase подключен");
   } catch (e) {
-    // В случае сбоя, по крайней мере, залогируем его и продолжим
-    debugPrint("⚠️ Ошибка инициализации Firebase: $e");
+    debugPrint("⚠️ Ошибка Firebase: $e");
   }
   
-
-  // Получаем роль
   final prefs = await SharedPreferences.getInstance();
   final String? userRole = prefs.getString('user_role');
 
-  runApp(MyApp(initialRole: userRole));
+  runApp(AppRoot(initialRole: userRole));
+}
+
+class AppRoot extends StatefulWidget {
+  final String? initialRole;
+  const AppRoot({super.key, this.initialRole});
+
+  @override
+  State<AppRoot> createState() => _AppRootState();
+}
+
+class _AppRootState extends State<AppRoot> with WidgetsBindingObserver { 
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this); 
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this); 
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.detached) {
+      clearSavedRole();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MyApp(initialRole: widget.initialRole);
+  }
 }
 
 class MyApp extends StatelessWidget {
@@ -41,25 +79,11 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'AI Помощник: SOS',
+      title: 'AUTO SOS',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         primarySwatch: Colors.red,
         scaffoldBackgroundColor: Colors.white,
-        appBarTheme: const AppBarTheme(
-          color: Colors.white,
-          elevation: 0,
-          titleTextStyle: TextStyle(
-            color: Colors.black,
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-          ),
-          iconTheme: IconThemeData(color: Colors.black),
-        ),
-        floatingActionButtonTheme: const FloatingActionButtonThemeData(
-          backgroundColor: Colors.red,
-          foregroundColor: Colors.white,
-        ),
       ),
       home: HomeRouter(initialRole: initialRole),
     );
@@ -76,8 +100,7 @@ class HomeRouter extends StatefulWidget {
 
 class _HomeRouterState extends State<HomeRouter> {
   final LocationExchangeService _locationService = LocationExchangeService.instance;
-  StreamSubscription? _peerSub;
-
+  
   @override
   void initState() {
     super.initState();
@@ -85,43 +108,43 @@ class _HomeRouterState extends State<HomeRouter> {
   }
 
   Future<void> _initLocationSharing() async {
-    // уникальный id устройства (простая генерация)
     final prefs = await SharedPreferences.getInstance();
     String? id = prefs.getString('device_id');
-    id ??= DateTime.now().millisecondsSinceEpoch.toString(); // временный уникальный id
-    await prefs.setString('device_id', id);
+    if (id == null) {
+      id = DateTime.now().millisecondsSinceEpoch.toString(); 
+      await prefs.setString('device_id', id);
+    }
 
-    // Запускаем обмен (метод start(myId: ...) в твоём сервисе)
-    await _locationService.start(myId: id, peerId: null, sendInterval: const Duration(seconds: 10));
-    // Просто логируем, что вызов прошел.
-    debugPrint("⚠️ start() завершился — проверь логи сервиса");
-
-    // Подписываемся на поток peerLocationStream (возвращает PeerLocation?)
-    _peerSub = _locationService.peerLocationStream.listen((peerLoc) {
-      debugPrint("📍 Обновлён peer: $peerLoc");
-      // здесь можно десяго: обновлять состояние карты и т.д.
-    }, onError: (e) {
-      debugPrint("Ошибка в peerLocationStream: $e");
-    });
-
-    debugPrint("✅ Обмен координатами запущен для устройства $id");
+    // Включаем трансляцию для работника, чтобы Клиент мог видеть его как evacuator.png
+    if (widget.initialRole == 'worker') {
+      await _locationService.start(
+        myId: id, 
+        peerId: null, 
+        sendInterval: const Duration(seconds: 10)
+      );
+    }
   }
 
   @override
   void dispose() {
-    _peerSub?.cancel();
     _locationService.stop();
     super.dispose();
   }
 
-  Widget _selectScreen() {
-    if (widget.initialRole == 'driver') return const MapScreen();
-    if (widget.initialRole == 'worker') return const WorkerHomeScreen();
-    return const AuthScreen();
-  }
-
   @override
   Widget build(BuildContext context) {
-    return _selectScreen();
+    // ✅ ИСПРАВЛЕННАЯ ЛОГИКА:
+    // Если роль есть — открываем МЕНЮ (MenuScreen), а не карту напрямую.
+    
+    if (widget.initialRole == 'driver') {
+      return const MenuScreen(isWorker: false);
+    }
+    
+    if (widget.initialRole == 'worker') {
+      return const MenuScreen(isWorker: true);
+    }
+
+    // Если роли нет — идем на регистрацию
+    return const AuthScreen();
   }
 }
