@@ -1,85 +1,167 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart'; 
-import 'map_screen.dart'; 
-import 'worker_home_screen.dart'; // ⬅️ НОВЫЙ ЭКРАН ДЛЯ РАБОТНИКА
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'menu_screen.dart'; // ✅ Подключаем экран Меню
 
-/// Экран выбора роли при первом запуске (заглушка авторизации)
-class AuthScreen extends StatelessWidget {
+class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
+
+  @override
+  State<AuthScreen> createState() => _AuthScreenState();
+}
+
+class _AuthScreenState extends State<AuthScreen> {
+  String? _selectedRole; // 'driver' или 'worker'
+  final _nameController = TextEditingController();
+  final _phoneController = TextEditingController();
+  
+  // Список выбранных специальностей (для профи)
+  final List<String> _selectedSpecialties = [];
+  bool _isLoading = false;
+
+  final List<String> _allSpecialties = [
+    '🚗 Эвакуатор', '🔧 Автомеханик', '⚡ Автоэлектрик', '🛞 Шиномонтаж',
+    '🔋 Прикурить', '⛽ Подвоз топлива', '🔑 Вскрытие замков',
+  ];
+
+  Future<void> _submit() async {
+    final name = _nameController.text.trim();
+    final phone = _phoneController.text.trim();
+
+    if (name.isEmpty || phone.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Заполните имя и телефон')));
+      return;
+    }
+
+    if (_selectedRole == 'worker' && _selectedSpecialties.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Выберите хотя бы одну специализацию')));
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      // 1. Ищем пользователя в Firebase по номеру телефона
+      final userDoc = await FirebaseFirestore.instance.collection('users').doc(phone).get();
+
+      if (!userDoc.exists) {
+        // 2. Если нет — РЕГИСТРИРУЕМ (создаем запись)
+        await FirebaseFirestore.instance.collection('users').doc(phone).set({
+          'name': name,
+          'phone': phone,
+          'role': _selectedRole,
+          'specialties': _selectedRole == 'worker' ? _selectedSpecialties : [],
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      }
+
+      // 3. Сохраняем локально, чтобы не логиниться каждый раз
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('user_role', _selectedRole!);
+      await prefs.setString('user_name', name);
+      await prefs.setString('device_id', phone); // Теперь телефон — наш ID
+
+      if (context.mounted) {
+        // ✅ ИСПРАВЛЕНИЕ: Переходим в MenuScreen, а не на Карту
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (context) => MenuScreen(
+              isWorker: _selectedRole == 'worker',
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Выберите свою роль')),
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Text(
-                'Как вы будете использовать приложение?',
-                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-                textAlign: TextAlign.center,
+      body: _selectedRole == null ? _buildRoleSelection() : _buildRegistrationForm(),
+    );
+  }
+
+  // Экран 1: Выбор кто ты
+  Widget _buildRoleSelection() {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        const Text("КТО ВЫ?", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 30),
+        _roleButton("Я ВОДИТЕЛЬ", "Нужна помощь на дороге", Icons.directions_car, Colors.red, () => setState(() => _selectedRole = 'driver')),
+        const SizedBox(height: 20),
+        _roleButton("Я СПЕЦИАЛИСТ", "Оказываю услуги помощи", Icons.build, Colors.blue.shade800, () => setState(() => _selectedRole = 'worker')),
+      ],
+    );
+  }
+
+  // Экран 2: Ввод данных
+  Widget _buildRegistrationForm() {
+    bool isWorker = _selectedRole == 'worker';
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        children: [
+          const SizedBox(height: 50),
+          Text(isWorker ? "РЕГИСТРАЦИЯ МАСТЕРА" : "РЕГИСТРАЦИЯ ВОДИТЕЛЯ", style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 30),
+          TextField(controller: _nameController, decoration: const InputDecoration(labelText: 'ФИО', border: OutlineInputBorder())),
+          const SizedBox(height: 15),
+          TextField(controller: _phoneController, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Номер телефона', border: OutlineInputBorder())),
+          
+          if (isWorker) ...[
+            const SizedBox(height: 25),
+            const Text("Выберите ваши услуги:", style: TextStyle(fontWeight: FontWeight.bold)),
+            Wrap(
+              spacing: 8,
+              children: _allSpecialties.map((spec) {
+                final isSelected = _selectedSpecialties.contains(spec);
+                return FilterChip(
+                  label: Text(spec),
+                  selected: isSelected,
+                  onSelected: (val) {
+                    setState(() {
+                      val ? _selectedSpecialties.add(spec) : _selectedSpecialties.remove(spec);
+                    });
+                  },
+                );
+              }).toList(),
+            ),
+          ],
+
+          const SizedBox(height: 40),
+          _isLoading 
+            ? const CircularProgressIndicator() 
+            : ElevatedButton(
+                onPressed: _submit,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: isWorker ? Colors.blue.shade800 : Colors.red,
+                  minimumSize: const Size(double.infinity, 55)
+                ),
+                child: const Text("ПОДТВЕРДИТЬ", style: TextStyle(color: Colors.white, fontSize: 18)),
               ),
-              const SizedBox(height: 40),
-              
-              // Кнопка для Водителя (Клиента)
-              _buildRoleButton(context, 'Водитель (Клиент)', 'driver', Icons.person, Colors.red),
-              
-              // Кнопка для Работника (Эвакуатор/СТО)
-              _buildRoleButton(context, 'Работник Эвакуатора / СТО', 'worker', Icons.local_shipping, Colors.blue),
-              
-              const SizedBox(height: 30),
-              const Text(
-                'Роль сохраняется локально. Приложение запустится в этом режиме при следующем входе.',
-                style: TextStyle(color: Colors.grey, fontSize: 14),
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ),
-        ),
+          TextButton(onPressed: () => setState(() => _selectedRole = null), child: const Text("Назад"))
+        ],
       ),
     );
   }
 
-  Widget _buildRoleButton(BuildContext context, String title, String roleCode, IconData icon, Color color) {
+  Widget _roleButton(String title, String sub, IconData icon, Color color, VoidCallback onTap) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      child: ElevatedButton.icon(
-        icon: Icon(icon, size: 28),
-        label: Text(title, style: const TextStyle(fontSize: 18)),
-        style: ElevatedButton.styleFrom(
-          minimumSize: const Size(double.infinity, 70),
-          backgroundColor: color,
-          foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          elevation: 5,
-        ),
-        onPressed: () async {
-          // 📌 Логика сохранения роли
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setString('user_role', roleCode);
-          
-          debugPrint('Роль выбрана: $roleCode. Сохранено.');
-          
-          // Переход на соответствующий главный экран
-          if (context.mounted) {
-            Widget nextScreen;
-            if (roleCode == 'driver') {
-              nextScreen = const MapScreen();
-            } else {
-              // Если роль 'worker', переходим на WorkerHomeScreen
-              nextScreen = const WorkerHomeScreen(); 
-            }
-
-            // Замена текущего экрана на новый (чтобы кнопка "Назад" не вела на выбор роли)
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => nextScreen),
-            );
-          }
-        },
+      padding: const EdgeInsets.symmetric(horizontal: 30),
+      child: ListTile(
+        onTap: onTap,
+        tileColor: color,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+        leading: Icon(icon, color: Colors.white, size: 30),
+        title: Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        subtitle: Text(sub, style: const TextStyle(color: Colors.white70)),
       ),
     );
   }
