@@ -1,9 +1,12 @@
 import 'dart:convert';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class DBService {
   static Database? _db;
+  static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   /// Инициализация базы данных для iOS/Android.
   static Future<void> init() async {
@@ -12,7 +15,6 @@ class DBService {
       join(dbPath, 'offline_sos.db'),
       version: 1,
       onCreate: (db, version) async {
-        // Таблица SOS (для офлайн-отправки)
         await db.execute('''
           CREATE TABLE sos(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -24,7 +26,6 @@ class DBService {
           )
         ''');
 
-        // Таблица cams (для Антирадара)
         await db.execute('''
           CREATE TABLE cams(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -34,7 +35,6 @@ class DBService {
           )
         ''');
 
-        // Таблица POIS (Points of Interest: Полиция, МЧС, Эвакуатор, СТО)
         await db.execute('''
           CREATE TABLE pois(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -42,16 +42,13 @@ class DBService {
             lon REAL,
             title TEXT,
             type TEXT 
-            -- Здесь можно добавить 'status' TEXT для Эвакуаторов/СТО
           )
         ''');
       },
     );
     
-    // ПРОВЕРКА: Если база данных POI пуста, загружаем тестовые данные
     final poisCount = Sqflite.firstIntValue(await _db!.rawQuery('SELECT COUNT(*) FROM pois'));
     if (poisCount == 0) {
-        // Тестовые данные для Алматы, Казахстан
         await importPoisFromJson('''
             [
                 {"lat": 43.235, "lon": 76.90, "title": "Полицейский участок 102", "type": "police"},
@@ -70,86 +67,97 @@ class DBService {
   }
 
   // =======================================================
-  // SOS (Экстренные вызовы)
+  // БЛОК FIREBASE И АВТОРИЗАЦИИ (НОВЫЙ РЕКОДИНГ)
   // =======================================================
 
-  /// Сохранить запрос SOS в локальную базу данных
+  /// Очистка роли пользователя
+  static Future<void> clearSavedRole() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('user_role');
+    print('✅ Сохраненная роль успешно удалена.');
+  }
+
+  /// Регистрация или вход пользователя (вырезано из auth_screen)
+  static Future<void> registerOrLoginUser({
+    required String phone,
+    required String name,
+    required String role,
+    required List<String> specialties,
+  }) async {
+    final userDoc = await _firestore.collection('users').doc(phone).get();
+
+    if (!userDoc.exists) {
+      await _firestore.collection('users').doc(phone).set({
+        'name': name,
+        'phone': phone,
+        'role': role,
+        'specialties': role == 'worker' ? specialties : [],
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('user_role', role);
+    await prefs.setString('user_name', name);
+    await prefs.setString('device_id', phone);
+  }
+
+  // =======================================================
+  // SOS OFFLINE (Локальная БД)
+  // =======================================================
+
   static Future<int> saveSOS(double lat, double lon, String note) async {
     if (_db == null) throw Exception('DB not initialized');
     return await _db!.insert('sos', {
       'lat': lat,
       'lon': lon,
-      'timestamp': DateTime.now().toIso8601String(), // Сохраняем время
+      'timestamp': DateTime.now().toIso8601String(),
       'note': note,
-      'sent': 0, // Не отправлено
+      'sent': 0, 
     });
   }
   
-  /// Получить неотправленные запросы SOS
   static Future<List<Map<String, dynamic>>> getPendingSOS() async {
     if (_db == null) throw Exception('DB not initialized');
     return await _db!.query('sos', where: 'sent = ?', whereArgs: [0]);
   }
 
-  /// Отметить запрос SOS как отправленный
   static Future<int> markSent(int id) async {
     if (_db == null) throw Exception('DB not initialized');
-    return await _db!.update(
-      'sos', 
-      {'sent': 1}, 
-      where: 'id = ?', 
-      whereArgs: [id],
-    );
+    return await _db!.update('sos', {'sent': 1}, where: 'id = ?', whereArgs: [id]);
   }
   
   // =======================================================
-  // Cams (Антирадар)
+  // Cams & POIS 
   // =======================================================
 
-  /// Импорт камер из JSON (с очисткой старых данных)
   static Future<void> importCamsFromJson(String jsonString) async {
     if (_db == null) throw Exception('DB not initialized');
     final List data = json.decode(jsonString);
     final batch = _db!.batch();
     batch.delete('cams'); 
     for (final item in data) {
-      batch.insert('cams', {
-        'lat': item['lat'],
-        'lon': item['lon'],
-        'title': item['title'],
-      });
+      batch.insert('cams', {'lat': item['lat'], 'lon': item['lon'], 'title': item['title']});
     }
     await batch.commit(noResult: true);
   }
 
-  /// Получить камеры
   static Future<List<Map<String, dynamic>>> getCams() async {
     if (_db == null) throw Exception('DB not initialized');
     return await _db!.query('cams');
   }
 
-  // =======================================================
-  // POI (Points of Interest: Полиция, МЧС, Эвакуатор, СТО)
-  // =======================================================
-  
-  /// Импорт POI из JSON (с очисткой старых данных)
   static Future<void> importPoisFromJson(String jsonString) async {
     if (_db == null) throw Exception('DB not initialized');
     final List data = json.decode(jsonString);
     final batch = _db!.batch();
     batch.delete('pois'); 
     for (final item in data) {
-      batch.insert('pois', {
-        'lat': item['lat'],
-        'lon': item['lon'],
-        'title': item['title'],
-        'type': item['type'], // 'police', 'mchs', 'evacuator', 'sto'
-      });
+      batch.insert('pois', {'lat': item['lat'], 'lon': item['lon'], 'title': item['title'], 'type': item['type']});
     }
     await batch.commit(noResult: true);
   }
 
-  /// Получить точки интереса (POI)
   static Future<List<Map<String, dynamic>>> getPois() async {
     if (_db == null) throw Exception('DB not initialized');
     return await _db!.query('pois');

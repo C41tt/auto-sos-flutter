@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'menu_screen.dart'; // ✅ Подключаем экран Меню
+import 'menu_screen.dart'; 
+import '../services/db_service_mobile.dart'; // ✅ Подключаем наш сервис
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -41,28 +40,15 @@ class _AuthScreenState extends State<AuthScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // 1. Ищем пользователя в Firebase по номеру телефона
-      final userDoc = await FirebaseFirestore.instance.collection('users').doc(phone).get();
-
-      if (!userDoc.exists) {
-        // 2. Если нет — РЕГИСТРИРУЕМ (создаем запись)
-        await FirebaseFirestore.instance.collection('users').doc(phone).set({
-          'name': name,
-          'phone': phone,
-          'role': _selectedRole,
-          'specialties': _selectedRole == 'worker' ? _selectedSpecialties : [],
-          'createdAt': FieldValue.serverTimestamp(),
-        });
-      }
-
-      // 3. Сохраняем локально, чтобы не логиниться каждый раз
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('user_role', _selectedRole!);
-      await prefs.setString('user_name', name);
-      await prefs.setString('device_id', phone); // Теперь телефон — наш ID
+      // ✅ РЕКОДИНГ: Вызываем чистую функцию из сервиса вместо простыни кода
+      await DBService.registerOrLoginUser(
+        phone: phone,
+        name: name,
+        role: _selectedRole!,
+        specialties: _selectedSpecialties,
+      );
 
       if (context.mounted) {
-        // ✅ ИСПРАВЛЕНИЕ: Переходим в MenuScreen, а не на Карту
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
             builder: (context) => MenuScreen(

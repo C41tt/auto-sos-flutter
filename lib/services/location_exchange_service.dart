@@ -2,7 +2,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:location/location.dart';
-import '../screens/cloud_service.dart'; 
+import 'cloud_service.dart';
 
 class PeerLocation {
   final double latitude;

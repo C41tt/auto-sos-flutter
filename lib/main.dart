@@ -4,17 +4,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_core/firebase_core.dart'; 
 
 import 'screens/auth_screen.dart';
-import 'screens/map_screen.dart'; 
-import 'screens/worker_home_screen.dart'; 
-import 'screens/menu_screen.dart'; // ✅ Добавил импорт Меню
-import 'services/db_service.dart';
+import 'screens/menu_screen.dart';
+import 'services/db_service_mobile.dart'; // ✅ Исправлен импорт на наш новый сервис
 import 'services/location_exchange_service.dart'; 
-
-Future<void> clearSavedRole() async {
-  final prefs = await SharedPreferences.getInstance();
-  await prefs.remove('user_role'); 
-  debugPrint('✅ Роль сброшена.');
-}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -62,7 +54,8 @@ class _AppRootState extends State<AppRoot> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
     if (state == AppLifecycleState.detached) {
-      clearSavedRole();
+      // ✅ РЕКОДИНГ: Вызываем функцию очистки из нашего сервиса
+      DBService.clearSavedRole();
     }
   }
 
@@ -115,7 +108,7 @@ class _HomeRouterState extends State<HomeRouter> {
       await prefs.setString('device_id', id);
     }
 
-    // Включаем трансляцию для работника, чтобы Клиент мог видеть его как evacuator.png
+    // Включаем трансляцию для работника, чтобы Клиент мог видеть его
     if (widget.initialRole == 'worker') {
       await _locationService.start(
         myId: id, 
@@ -133,9 +126,6 @@ class _HomeRouterState extends State<HomeRouter> {
 
   @override
   Widget build(BuildContext context) {
-    // ✅ ИСПРАВЛЕННАЯ ЛОГИКА:
-    // Если роль есть — открываем МЕНЮ (MenuScreen), а не карту напрямую.
-    
     if (widget.initialRole == 'driver') {
       return const MenuScreen(isWorker: false);
     }
@@ -144,7 +134,6 @@ class _HomeRouterState extends State<HomeRouter> {
       return const MenuScreen(isWorker: true);
     }
 
-    // Если роли нет — идем на регистрацию
     return const AuthScreen();
   }
 }
