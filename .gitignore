@@ -41,3 +41,13 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+<<<<<<< HEAD
+=======
+keys.json
+# Игнорируем ненужные десктопные и веб платформы
+/web/
+/windows/
+/macos/
+/linux/
+/ios/
+>>>>>>> 0cafb4b (Удалил лишние платформы и пофиксил настройки Java)
