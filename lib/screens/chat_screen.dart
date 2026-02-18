@@ -1,7 +1,7 @@
 // lib/screens/chat_screen.dart
 
 import 'package:flutter/material.dart';
-import '../service/cloud_service.dart';
+import '../services/cloud_service.dart';
 import '../constants/app_constants.dart'; // ⬅️ ИМПОРТ КОНСТАНТ
 
 /// Экран чата с ИИ-помощником или Оператором
