@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'cloud_service.dart'; // Подключаем наш сервис
+import '../services/cloud_service.dart';
 
 class ProductListScreen extends StatelessWidget {
   final String categoryTitle; // "Двигатель", "Масла" и т.д.

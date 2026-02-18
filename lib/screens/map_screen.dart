@@ -7,7 +7,7 @@ import 'package:permission_handler/permission_handler.dart' as perm;
 import 'dart:async';
 
 import '../services/db_service.dart';
-import './cloud_service.dart';
+import '../services/cloud_service.dart';
 import '../widgets/news_feed.dart';
 import 'chat_screen.dart';
 import 'map_flutter.dart';

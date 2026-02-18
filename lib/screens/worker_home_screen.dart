@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import './cloud_service.dart';
+import '../services/cloud_service.dart';
 import 'auth_screen.dart';
 import 'map_screen.dart';
 
